@@ -57,9 +57,8 @@ class VPNServer:
         self.next_client_ip = 2  # Start from 10.8.0.2
         self.client_ips = {}  # {(client_ip, client_port): assigned_vpn_ip}
         
-    def _derive_key(self, password):
+    def _derive_key(self, salt, password):
         """Derive a 256-bit encryption key from password"""
-        salt = b'pyvpn_salt_v1'  # Must match client
         kdf = PBKDF2HMAC(
             algorithm=hashes.SHA256(),
             length=32,
