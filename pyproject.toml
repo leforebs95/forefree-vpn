@@ -1,0 +1,21 @@
+[project]
+name = "pyvpn"
+version = "0.1.0"
+description = "Simple open-source VPN for learning networking fundamentals"
+requires-python = ">=3.10"
+dependencies = [
+    "aws-cdk-lib>=2.220.0",
+    "constructs>=10.4.2",
+    "cryptography>=46.0.3",
+]
+
+[project.scripts]
+pyvpn-client = "pyvpn.client.vpn_client:main"
+pyvpn-server = "pyvpn.server.vpn_server:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["pyvpn"]
