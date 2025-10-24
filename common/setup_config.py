@@ -59,7 +59,7 @@ VPN_PASSWORD={password}
 VPN_SALT={salt}
 
 # Optional: AWS Configuration (for production deployment)
-# AWS_REGION=us-east-1
+# AWS_REGION=us-west-1
 # VPN_SECRET_NAME=pyvpn/config
 """
     
@@ -125,7 +125,7 @@ def create_aws_secret(password, salt):
         import json
         from botocore.exceptions import ClientError
         
-        region = input("AWS Region [us-east-1]: ").strip() or "us-east-1"
+        region = input("AWS Region [us-west-1]: ").strip() or "us-west-1"
         secret_name = input("Secret name [pyvpn/config]: ").strip() or "pyvpn/config"
         
         print()

@@ -3,7 +3,7 @@
 PyVPN CDK Deployment App
 Interactive AWS infrastructure deployment for your VPN server
 """
-
+from dotenv import load_dotenv
 import aws_cdk as cdk
 from constructs import Construct
 from aws_cdk import (
@@ -16,6 +16,7 @@ from aws_cdk import (
 )
 import os
 
+load_dotenv()
 
 class PyVPNStack(Stack):
     """
@@ -295,7 +296,7 @@ def main():
     print()
     
     # Check if .env exists
-    if not os.path.exists('.env'):
+    if not os.path.exists('../.env'):
         print("⚠️  No .env file found!")
         print()
         print("First, run the configuration setup:")
@@ -313,7 +314,7 @@ def main():
     use_existing = input("   Use existing AWS secret? (Y/n): ").strip().lower()
     
     if use_existing != 'n':
-        secret_name = input("   Secret name [pyvpn/config]: ").strip() or "pyvpn/config"
+        secret_name = os.getenv('VPN_SECRET_NAME', 'pyvpn/config')
         
         # Try to verify it exists
         try:
@@ -376,7 +377,6 @@ def main():
     print("=" * 70)
     print("📋 Deployment Summary")
     print("=" * 70)
-    print(f"   VPN Password:    {'*' * len(vpn_password)}")
     print(f"   EC2 Key Pair:    {key_name or 'None (SSM access only)'}")
     print(f"   Instance Type:   {instance_type}")
     print(f"   SSH Access:      {ssh_cidr}")

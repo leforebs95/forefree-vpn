@@ -10,8 +10,11 @@ import os
 import time
 import json
 
+from dotenv import load_dotenv
+load_dotenv()
 
-def run_command(cmd, description, check=True, capture_output=False):
+
+def run_command(cmd, description, check=True, capture_output=False, stdin=None):
     """Run a shell command with nice output"""
     print(f"   → {description}...")
     try:
@@ -25,7 +28,7 @@ def run_command(cmd, description, check=True, capture_output=False):
             )
             return result.stdout.strip()
         else:
-            subprocess.run(cmd, shell=True, check=check)
+            subprocess.run(cmd, shell=True, check=check, stdin=stdin)
             return None
     except subprocess.CalledProcessError as e:
         print(f"   ✗ Error: {e}")
@@ -107,13 +110,13 @@ def bootstrap_cdk(cdk_cmd):
     
     if already_bootstrapped != 'y':
         print("\n   Bootstrapping CDK...")
-        region = os.getenv('AWS_DEFAULT_REGION', 'us-east-1')
+        region = os.getenv('AWS_REGION', 'us-east-1')
         print(f"   Region: {region}")
         
         if cdk_cmd == "uv":
-            run_command(f"cd infra && uv run cdk bootstrap", "Bootstrapping CDK")
+            run_command(f"uv run cdk bootstrap", "Bootstrapping CDK", stdin=sys.stdin)
         else:
-            run_command("cd infra && cdk bootstrap", "Bootstrapping CDK")
+            run_command("cdk bootstrap", "Bootstrapping CDK", stdin=sys.stdin)
         
         print("   ✓ CDK bootstrapped!")
     else:
@@ -127,12 +130,12 @@ def deploy_stack(cdk_cmd):
     print()
     
     if cdk_cmd == "uv":
-        cmd = "cd infra && uv run python app.py"
+        cmd = "uv run python app.py"
     else:
-        cmd = "cd infra && python app.py"
+        cmd = "python3 app.py"
     
     # The app.py will handle interactive prompts
-    result = subprocess.run(cmd, shell=True)
+    result = subprocess.run(cmd, shell=True, stdin=sys.stdin)
     
     if result.returncode != 0:
         print("\n   ✗ Deployment failed!")
