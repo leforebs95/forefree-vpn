@@ -10,6 +10,7 @@ import select
 import argparse
 import sys
 import os
+import fcntl
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import hashes
@@ -46,6 +47,7 @@ class VPNClient:
         
         # Network sockets
         self.tun_fd = None
+        self._tun_socket = None
         self.udp_socket = None
         
     def _derive_key(self, salt, password):
@@ -102,22 +104,63 @@ class VPNClient:
             return None
     
     def _create_tun_interface(self):
-        """Create TUN interface on macOS"""
+        """
+        Create TUN interface on macOS using kernel control socket.
+        
+        macOS doesn't let you directly open /dev/utunX - instead you need to:
+        1. Open a kernel control socket
+        2. Connect to the utun control with a specific unit number
+        3. The system creates the utunX device for you
+        """
         try:
-            # On macOS, TUN devices are at /dev/utunX
-            # utun0, utun1 are often used by system, so we use utun3+
-            tun_path = f'/dev/{self.tun_name}'
+            # Constants for macOS TUN
+            UTUN_CONTROL_NAME = "com.apple.net.utun_control"
+            CTLIOCGINFO = 0xc0644e03  # ioctl to get control ID
             
-            # Open TUN device
-            self.tun_fd = os.open(tun_path, os.O_RDWR)
+            # Open a socket to the kernel control
+            sock = socket.socket(socket.AF_SYSTEM, socket.SOCK_DGRAM, socket.SYSPROTO_CONTROL)
+            
+            # Get the control ID for utun
+            ctlinfo = struct.pack('I96s', 0, UTUN_CONTROL_NAME.encode())
+            ctlinfo = fcntl.ioctl(sock.fileno(), CTLIOCGINFO, ctlinfo)
+            ctlid = struct.unpack('I96s', ctlinfo)[0]
+            
+            # Extract requested unit number from tun_name (e.g., "utun3" -> 3)
+            if self.tun_name.startswith('utun'):
+                requested_unit = int(self.tun_name[4:]) if len(self.tun_name) > 4 else 0
+            else:
+                requested_unit = 0
+            
+            # Try to connect to the requested unit, or find next available
+            actual_unit = None
+            for try_unit in range(requested_unit, requested_unit + 10):
+                try:
+                    # sockaddr_ctl structure: sc_id, sc_unit
+                    # Unit numbers start at 1 (unit 1 = utun0)
+                    # addr = struct.pack('BBHII', 0, 0, 0, ctlid, try_unit + 1)
+                    sock.connect((ctlid, try_unit + 1))
+                    actual_unit = try_unit
+                    break
+                except OSError:
+                    if try_unit == requested_unit + 9:
+                        raise OSError(f"Could not connect to any utun device")
+                    continue
+            
+            self.tun_fd = sock.fileno()
+            self.tun_name = f"utun{actual_unit}"
             
             print(f"✓ Created TUN interface: {self.tun_name}")
             print(f"  File descriptor: {self.tun_fd}")
+            
+            # Keep the socket alive (prevent garbage collection)
+            self._tun_socket = sock
             
             return True
         except Exception as e:
             print(f"✗ Failed to create TUN interface: {e}")
             print(f"  Make sure you run this with sudo!")
+            import traceback
+            traceback.print_exc()
             return False
     
     def _configure_tun_interface(self, client_ip='10.8.0.2', netmask='255.255.255.0'):
@@ -260,8 +303,8 @@ class VPNClient:
     
     def _cleanup(self):
         """Clean up resources"""
-        if self.tun_fd:
-            os.close(self.tun_fd)
+        if self._tun_socket:
+            self._tun_socket.close()
         if self.udp_socket:
             self.udp_socket.close()
         print("Cleanup complete")
