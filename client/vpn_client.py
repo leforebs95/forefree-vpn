@@ -14,10 +14,11 @@ from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2
+from config import ConfigError, VPNConfig
 
 
 class VPNClient:
-    def __init__(self, server_host, server_port, password, tun_name='utun3'):
+    def __init__(self, server_host, server_port, password, tun_name='utun3', use_aws_secrets=False):
         """
         Initialize VPN Client
         
@@ -30,17 +31,25 @@ class VPNClient:
         self.server_host = server_host
         self.server_port = server_port
         self.tun_name = tun_name
+
+        # Load configuration
+        try:
+            config = VPNConfig(use_aws_secrets=use_aws_secrets)
+            # Use provided password or fall back to config
+            password_to_use = password if password else config.password
+            salt = config.salt
+        except ConfigError as e:
+            raise ConfigError(f"Failed to load VPN configuration: {e}")
         
         # Derive encryption key from password
-        self.key = self._derive_key(password)
+        self.key = self._derive_key(salt, password_to_use)
         
         # Network sockets
         self.tun_fd = None
         self.udp_socket = None
         
-    def _derive_key(self, password):
+    def _derive_key(self, salt, password):
         """Derive a 256-bit encryption key from password"""
-        salt = b'pyvpn_salt_v1'  # In production, this should be random and shared
         kdf = PBKDF2(
             algorithm=hashes.SHA256(),
             length=32,
@@ -257,30 +266,3 @@ class VPNClient:
             self.udp_socket.close()
         print("Cleanup complete")
 
-
-def main():
-    parser = argparse.ArgumentParser(description='PyVPN Client - Simple VPN client')
-    parser.add_argument('--server', default='127.0.0.1', help='VPN server address')
-    parser.add_argument('--port', type=int, default=51820, help='VPN server port')
-    parser.add_argument('--password', default='mysecretpassword', help='Shared password')
-    parser.add_argument('--tun', default='utun3', help='TUN interface name')
-    
-    args = parser.parse_args()
-    
-    # Check if running as root
-    if os.geteuid() != 0:
-        print("Error: This script must be run as root (use sudo)")
-        sys.exit(1)
-    
-    client = VPNClient(
-        server_host=args.server,
-        server_port=args.port,
-        password=args.password,
-        tun_name=args.tun
-    )
-    
-    client.start()
-
-
-if __name__ == '__main__':
-    main()

@@ -15,10 +15,15 @@ from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2
+from dotenv import load_dotenv
+
+from config import ConfigError, VPNConfig
+
+load_dotenv()
 
 
 class VPNServer:
-    def __init__(self, listen_port, password, tun_name='tun0'):
+    def __init__(self, listen_port, password, tun_name='tun0', use_aws_secrets=False):
         """
         Initialize VPN Server
         
@@ -29,9 +34,17 @@ class VPNServer:
         """
         self.listen_port = listen_port
         self.tun_name = tun_name
+
+        # Load configuration
+        try:
+            config = VPNConfig(use_aws_secrets=use_aws_secrets)
+            password_to_use = password if password else config.password
+            salt = config.salt
+        except ConfigError as e:
+            raise ConfigError(f"Failed to load VPN configuration: {e}")
         
         # Derive encryption key from password
-        self.key = self._derive_key(password)
+        self.key = self._derive_key(salt, password_to_use)
         
         # Network sockets
         self.tun_fd = None
@@ -396,29 +409,3 @@ class VPNServer:
             self.udp_socket.close()
         
         print("Cleanup complete")
-
-
-def main():
-    parser = argparse.ArgumentParser(description='PyVPN Server - Simple VPN server')
-    parser.add_argument('--port', type=int, default=51820, help='UDP port to listen on')
-    parser.add_argument('--password', default='mysecretpassword', help='Shared password')
-    parser.add_argument('--tun', default='tun0', help='TUN interface name')
-    
-    args = parser.parse_args()
-    
-    # Check if running as root
-    if os.geteuid() != 0:
-        print("Error: This script must be run as root (use sudo)")
-        sys.exit(1)
-    
-    server = VPNServer(
-        listen_port=args.port,
-        password=args.password,
-        tun_name=args.tun
-    )
-    
-    server.start()
-
-
-if __name__ == '__main__':
-    main()
