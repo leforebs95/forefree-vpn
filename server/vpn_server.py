@@ -14,10 +14,10 @@ import subprocess
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import hashes
-from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2
+from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 from dotenv import load_dotenv
 
-from config import ConfigError, VPNConfig
+from common.config import ConfigError, VPNConfig
 
 load_dotenv()
 
@@ -60,7 +60,7 @@ class VPNServer:
     def _derive_key(self, password):
         """Derive a 256-bit encryption key from password"""
         salt = b'pyvpn_salt_v1'  # Must match client
-        kdf = PBKDF2(
+        kdf = PBKDF2HMAC(
             algorithm=hashes.SHA256(),
             length=32,
             salt=salt,

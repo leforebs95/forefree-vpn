@@ -2,8 +2,8 @@ import argparse
 import os
 import sys
 from dotenv import load_dotenv
-from config import ConfigError
-from vpn_client import VPNClient
+from common.config import ConfigError
+from client.vpn_client import VPNClient
 
 def main():
     parser = argparse.ArgumentParser(description='PyVPN Client - Simple VPN client')
@@ -11,6 +11,7 @@ def main():
     parser.add_argument('--port', type=int, default=51820, help='VPN server port')
     parser.add_argument('--password', default='mysecretpassword', help='Shared password')
     parser.add_argument('--tun', default='utun3', help='TUN interface name')
+    parser.add_argument('--use-aws-secrets', action='store_true', help='Use AWS Secrets Manager')
     
     args = parser.parse_args()
     

@@ -13,8 +13,8 @@ import os
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import hashes
-from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2
-from config import ConfigError, VPNConfig
+from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
+from common.config import ConfigError, VPNConfig
 
 
 class VPNClient:
@@ -50,7 +50,7 @@ class VPNClient:
         
     def _derive_key(self, salt, password):
         """Derive a 256-bit encryption key from password"""
-        kdf = PBKDF2(
+        kdf = PBKDF2HMAC(
             algorithm=hashes.SHA256(),
             length=32,
             salt=salt,
