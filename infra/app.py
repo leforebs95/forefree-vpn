@@ -10,6 +10,7 @@ from aws_cdk import (
     Stack,
     aws_ec2 as ec2,
     aws_iam as iam,
+    aws_secretsmanager as secretsmanager,
     CfnOutput,
     Duration,
 )
@@ -32,7 +33,7 @@ class PyVPNStack(Stack):
         self, 
         scope: Construct, 
         construct_id: str,
-        vpn_password: str,
+        secret_name: str,
         instance_type: str = "t3.micro",
         allowed_ssh_cidr: str = "0.0.0.0/0",
         key_name: str = None,
@@ -78,6 +79,29 @@ class PyVPNStack(Stack):
                 )
             ],
         )
+
+        # Reference existing secret (don't create it)
+        if secret_name:
+            vpn_secret = secretsmanager.Secret.from_secret_name_v2(
+                self,
+                "VPNSecret",
+                secret_name=secret_name
+            )
+            
+            # Grant read access to EC2 instance
+            vpn_secret.grant_read(role)
+            
+            use_aws_secrets_flag = "--use-aws-secrets"
+            
+            # Output
+            CfnOutput(
+                self,
+                "SecretName",
+                value=secret_name,
+                description="AWS Secrets Manager secret name",
+            )
+        else:
+            use_aws_secrets_flag = ""
         
         # User Data - Script that runs on first boot
         user_data = ec2.UserData.for_linux()
@@ -100,6 +124,19 @@ class PyVPNStack(Stack):
             "",
             "# Install dependencies",
             "apt-get install -y python3 python3-pip curl iptables git",
+            "",
+            "# Load TUN kernel module (critical for VPN functionality)",
+            "echo '>>> Loading TUN kernel module...'",
+            "modprobe tun",
+            "echo 'tun' >> /etc/modules",  # Persist across reboots
+            "",
+            "# Verify TUN device exists",
+            "if [ -e /dev/net/tun ]; then",
+            "    echo '✓ TUN device available at /dev/net/tun'",
+            "else",
+            "    echo '✗ WARNING: TUN device not found!'",
+            "    exit 1",
+            "fi",
             "",
             "# Install uv as ubuntu user",
             "sudo -u ubuntu bash -c 'curl -LsSf https://astral.sh/uv/install.sh | sh'",
@@ -158,7 +195,7 @@ class PyVPNStack(Stack):
             "Type=simple",
             "User=root",
             "WorkingDirectory=/home/ubuntu/pyvpn",
-            f"ExecStart=/home/ubuntu/.cargo/bin/uv run pyvpn-server --port 51820 --password {vpn_password}",
+            f"ExecStart=/home/ubuntu/.cargo/bin/uv run pyvpn-server --port 51820 {use_aws_secrets_flag}",
             "Restart=always",
             "RestartSec=10",
             "",
@@ -249,9 +286,7 @@ class PyVPNStack(Stack):
 
 
 def main():
-    """
-    Interactive CDK deployment with helpful prompts
-    """
+    """Interactive CDK deployment with helpful prompts"""
     import sys
     
     print("=" * 70)
@@ -259,19 +294,43 @@ def main():
     print("=" * 70)
     print()
     
-    # Get VPN password
-    print("📝 Step 1: VPN Password")
-    print("   This password encrypts your VPN traffic.")
-    print("   Use a strong, random password (at least 16 characters)")
-    print()
-    vpn_password = input("   Enter VPN password: ").strip()
-    
-    if len(vpn_password) < 8:
-        print("   ⚠️  Warning: Password is short. Recommend at least 16 characters!")
-        proceed = input("   Continue anyway? (y/N): ").strip().lower()
+    # Check if .env exists
+    if not os.path.exists('.env'):
+        print("⚠️  No .env file found!")
+        print()
+        print("First, run the configuration setup:")
+        print("   $ uv run setup-config")
+        print()
+        proceed = input("   Continue without .env? (y/N): ").strip().lower()
         if proceed != 'y':
-            print("   Exiting...")
+            print("   Run 'uv run setup-config' first, then try again.")
             sys.exit(0)
+    
+    print("📝 Step 1: VPN Secret Configuration")
+    print("   You can use an existing AWS secret or create a new one.")
+    print()
+    
+    use_existing = input("   Use existing AWS secret? (Y/n): ").strip().lower()
+    
+    if use_existing != 'n':
+        secret_name = input("   Secret name [pyvpn/config]: ").strip() or "pyvpn/config"
+        
+        # Try to verify it exists
+        try:
+            import boto3
+            client = boto3.client('secretsmanager')
+            client.describe_secret(SecretId=secret_name)
+            print(f"   ✓ Found secret: {secret_name}")
+        except Exception as e:
+            print(f"   ⚠️  Could not verify secret: {e}")
+            print()
+            print("   Create it first with: uv run setup-config")
+            proceed = input("   Continue anyway? (y/N): ").strip().lower()
+            if proceed != 'y':
+                sys.exit(0)
+    else:
+        secret_name = None
+        print("   ⚠️  Server will need password in .env file")
     
     print()
     
@@ -342,7 +401,7 @@ def main():
     PyVPNStack(
         app,
         "PyVPNStack",
-        vpn_password=vpn_password,
+        secret_name=secret_name,
         instance_type=instance_type,
         allowed_ssh_cidr=ssh_cidr,
         key_name=key_name,
