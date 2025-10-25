@@ -286,118 +286,27 @@ class PyVPNStack(Stack):
         )
 
 
-def main():
-    """Interactive CDK deployment with helpful prompts"""
-    import sys
-    
-    print("=" * 70)
-    print("🚀 PyVPN AWS Deployment - Interactive Setup")
-    print("=" * 70)
-    print()
-    
-    # Check if .env exists
-    if not os.path.exists('../.env'):
-        print("⚠️  No .env file found!")
-        print()
-        print("First, run the configuration setup:")
-        print("   $ uv run setup-config")
-        print()
-        proceed = input("   Continue without .env? (y/N): ").strip().lower()
-        if proceed != 'y':
-            print("   Run 'uv run setup-config' first, then try again.")
-            sys.exit(0)
-    
-    print("📝 Step 1: VPN Secret Configuration")
-    print("   You can use an existing AWS secret or create a new one.")
-    print()
-    
-    use_existing = input("   Use existing AWS secret? (Y/n): ").strip().lower()
-    
-    if use_existing != 'n':
-        secret_name = os.getenv('VPN_SECRET_NAME', 'pyvpn/config')
-        
-        # Try to verify it exists
-        try:
-            import boto3
-            client = boto3.client('secretsmanager')
-            client.describe_secret(SecretId=secret_name)
-            print(f"   ✓ Found secret: {secret_name}")
-        except Exception as e:
-            print(f"   ⚠️  Could not verify secret: {e}")
-            print()
-            print("   Create it first with: uv run setup-config")
-            proceed = input("   Continue anyway? (y/N): ").strip().lower()
-            if proceed != 'y':
-                sys.exit(0)
-    else:
-        secret_name = None
-        print("   ⚠️  Server will need password in .env file")
-    
-    print()
-    
-    # Get EC2 key pair
-    print("📝 Step 2: EC2 Key Pair (for SSH access)")
-    print("   You need an EC2 key pair to SSH into your server.")
-    print("   📚 How to create: https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/create-key-pairs.html")
-    print()
-    print("   List your existing key pairs:")
-    print("   $ aws ec2 describe-key-pairs --query 'KeyPairs[*].KeyName' --output table")
-    print()
-    key_name = input("   Enter key pair name (or press Enter to skip SSH access): ").strip()
-    
-    if not key_name:
-        print("   ⚠️  Skipping SSH key - you'll use AWS Systems Manager instead")
-        key_name = None
-    
-    print()
-    
-    # Get instance type
-    print("📝 Step 3: Instance Type")
-    print("   Recommended options:")
-    print("   - t3.micro  (1 vCPU, 1GB RAM) ~$7.50/month - Good for 1-2 users")
-    print("   - t3.small  (2 vCPU, 2GB RAM) ~$15/month  - Better performance")
-    print("   - t4g.micro (ARM, 1GB RAM)    ~$5/month   - Most cost-effective")
-    print()
-    instance_type = input("   Enter instance type [t3.micro]: ").strip() or "t3.micro"
-    print()
-    
-    # Get SSH CIDR
-    print("📝 Step 4: SSH Access (Security)")
-    print("   Restrict SSH access to your IP for better security.")
-    print("   Find your IP: curl ifconfig.me")
-    print()
-    print("   Options:")
-    print("   - Your IP only: YOUR.IP.ADDRESS/32 (most secure)")
-    print("   - Anywhere: 0.0.0.0/0 (less secure, but convenient)")
-    print()
-    ssh_cidr = input("   Enter allowed SSH CIDR [0.0.0.0/0]: ").strip() or "0.0.0.0/0"
-    print()
-    
-    # Summary
-    print("=" * 70)
-    print("📋 Deployment Summary")
-    print("=" * 70)
-    print(f"   EC2 Key Pair:    {key_name or 'None (SSM access only)'}")
-    print(f"   Instance Type:   {instance_type}")
-    print(f"   SSH Access:      {ssh_cidr}")
-    print()
-    print("   Estimated Cost:  ~${:.2f}/month".format(
-        7.50 if 'micro' in instance_type else 15.00
-    ))
-    print()
-    
-    proceed = input("   Deploy this configuration? (Y/n): ").strip().lower()
-    if proceed == 'n':
-        print("   Deployment cancelled.")
-        sys.exit(0)
-    
-    print()
-    print("🚀 Starting deployment...")
-    print()
-    
-    # Create CDK app
+def deploy(
+    secret_name: str = None,
+    key_name: str = None,
+    instance_type: str = "t3.micro",
+    ssh_cidr: str = "0.0.0.0/0",
+    account: str = None,
+    region: str = "us-west-1"
+):
+    """
+    Deploy the PyVPN CDK stack
+
+    Args:
+        secret_name: AWS Secrets Manager secret name for VPN password
+        key_name: EC2 key pair name for SSH access
+        instance_type: EC2 instance type (default: t3.micro)
+        ssh_cidr: CIDR block for SSH access (default: 0.0.0.0/0)
+        account: AWS account ID (auto-detected if not provided)
+        region: AWS region (default: us-west-1)
+    """
     app = cdk.App()
-    
+
     PyVPNStack(
         app,
         "PyVPNStack",
@@ -406,13 +315,14 @@ def main():
         allowed_ssh_cidr=ssh_cidr,
         key_name=key_name,
         env=cdk.Environment(
-            account=os.getenv('CDK_DEFAULT_ACCOUNT'),
-            region=os.getenv('CDK_DEFAULT_REGION', 'us-east-1'),
+            account=account or os.getenv('CDK_DEFAULT_ACCOUNT'),
+            region=region or os.getenv('CDK_DEFAULT_REGION', 'us-west-1'),
         ),
     )
-    
+
     app.synth()
 
 
 if __name__ == "__main__":
-    main()
+    # When run directly, just deploy with environment defaults
+    deploy()

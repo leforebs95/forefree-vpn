@@ -59,8 +59,8 @@ VPN_PASSWORD={password}
 VPN_SALT={salt}
 
 # Optional: AWS Configuration (for production deployment)
-# AWS_REGION=us-west-1
-# VPN_SECRET_NAME=pyvpn/config
+AWS_REGION=us-west-1
+VPN_SECRET_NAME=pyvpn/config
 """
     
     env_file = '.env'
