@@ -52,11 +52,11 @@ def create_env_file(password, salt):
 # DO NOT commit this file to git!
 
 # VPN Password
-VPN_PASSWORD={password}
+VPN_PASSWORD="{password}"
 
 # VPN Salt (32 bytes, base64 encoded)
 # Keep this safe - losing it means you can't decrypt old sessions
-VPN_SALT={salt}
+VPN_SALT="{salt}"
 
 # Optional: AWS Configuration (for production deployment)
 AWS_REGION=us-west-1
